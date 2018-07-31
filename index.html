@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Socket.IO chat</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font: 13px Helvetica, Arial; }
+      form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
+      form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
+      form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+      #typing { display: none; }
+      #messages { list-style-type: none; margin: 0; padding: 0; }
+      #messages li { padding: 5px 10px; }
+      #messages li:nth-child(odd) { background: #eee; }
+      #messages li.connected { background: #080; }
+      #messages li.disconnected { background: #F00; }
+      #messages li.username { background: #FFB6C1; }
+    </style>
+  </head>
+  <body>
+    <ul id="userList">TEST</ul>
+    <ul id="typing">A USER IS TYPING</ul>
+    <ul id="messages"></ul>
+    <form action="">
+      <input id="m" autocomplete="off" ><button>Send</button>
+    </form>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+    <script>
+      $(function () {
+        var socket = io();
+        // Username can enter their name and it is sent to server
+        var thisUser = "";
+        enterName();
+        function enterName(){
+          var newUser = window.prompt("Please enter your name", "");
+          if (newUser == null || newUser == ""){
+            enterName();
+            return;
+          } else {
+            thisUser = newUser;
+            socket.emit('new user', newUser);
+            newUser = null;
+          };
+
+        };
+        // User is typing functionality, probably more verbose than it could be but it works!
+        $('form').keydown(function userTyping(){
+          socket.emit('userTyping', typing);
+        });
+        function typingHide(){
+          var typing = document.getElementById('typing');
+          typing.style.display = "none";
+        };
+        function typingDisplay(){
+          var typing = document.getElementById('typing');
+          typing.style.display = "block";
+        };
+        // Variable defined outside of function scope to prevent errors
+        var hide;
+        socket.on('userTyping', function(typing){
+          clearTimeout(hide)
+          typingDisplay();
+          // The usertyping wasnt working just calling typingHide as a function within setTimeout, so while redundant it is necessary
+          hide = setTimeout(function(){
+            var typing = document.getElementById('typing');
+            typing.style.display = "none";
+          }, 3000);
+        });
+
+        // submit form emits chat message to server
+        $('form').submit(function(){
+          var inputText = $('#m').val();
+          console.log(socket.id);
+          var msg = {
+            name: thisUser,
+            type: "message",
+            text: inputText,
+            id: socket.id,
+            date: Date.now()
+          };
+          var clientTime = new Date(msg.date);
+          clientTime = clientTime.toLocaleTimeString('en-US');
+          $('#messages').append($('<li>').text( clientTime + ':  ' + msg.name + ': ' + msg.text));
+          msg = JSON.stringify(msg)
+          socket.emit('chat message', msg);
+          $('#m').val('');
+          return false;
+        });
+        // Prints connection message
+        socket.on('user connected', function(connected){
+          $('#messages').append($(`<li class="connected">`).text(connected));
+        });
+        // Prints Chat Message
+        socket.on('chat message', function(received){
+          typingHide();
+          var msg = JSON.parse(received);
+          var name = msg.name;
+          var text = msg.text;
+          var date = msg.date;
+          var id = msg.id;
+          // Only will print messages sent by other users, I later found out about broadcast on server side so this could be omitted
+          if (msg.id != socket.id){
+            $('#messages').append($('<li>').text( date + ':  ' + name + ': ' + text));
+          } else {
+            return;
+          }
+        });
+        // Prints DC message
+        socket.on('user disconnected', function(disconnected){
+          $('#messages').append($(`<li class="disconnected">`).text(disconnected));
+        });
+        // Updates onlineUsers with info
+        socket.on('userList update', function(userListUpdate){
+          var userNum = userListUpdate.length;
+          var userList = `The following users (${userNum}) are currently online: |/|`;
+          var newList = userListUpdate;
+          newList.forEach(function(item){
+            userList += ` ${item} |/| `;
+          });
+          $('#userList').text(userList);
+        });
+
+      });
+    </script>
+  </body>
+</html>
